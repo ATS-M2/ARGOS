@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import mapboxgl from 'mapbox-gl';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
-import { inside } from '@turf/turf';
+import inside from '@turf/inside';
 
 function MapComponent() {
   const [map, setMap] = useState(null);

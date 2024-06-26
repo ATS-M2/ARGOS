@@ -1,25 +1,48 @@
 import React, { useRef, useEffect, useState } from 'react';
 import mapboxgl, { LngLat } from 'mapbox-gl';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
-import { inside } from '@turf/turf';
+import inside from '@turf/inside';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSearch, faLayerGroup, faTools, faGear, faBusSimple } from '@fortawesome/free-solid-svg-icons';
+import { faSearch, faLayerGroup, faTools, faGear, faBusSimple, faChartLine, faUser } from '@fortawesome/free-solid-svg-icons';
 import axios from 'axios'
 import './Map.css';
 import Cookies from "js-cookie"
-import assets from "./assets";
-import Window from './components/window';
-import MapStyleSelection from './components/selection';
-import PDLTabs from './components/pdlTab';
-import DataLayer from './components/layer';
-import SearchPanel from './components/search';
+import assets from '../../assets';
+import Window from '../../components/window';
+import MapStyleSelection from '../../components/selection';
+import PDLTabs from '../../components/pdlTab';
+import Dashboard from '../../components/dashboard';
+import DataManager from '../../components/dataManagement';
+import SearchPanel from '../../components/search';
 import { Popup } from "mapbox-gl";
-import SummaryPanel from './components/summary';
+import AgentPanel from '../../components/agent';
+import store from '../../Redux/store';
+import { useDispatch, useSelector, Provider } from 'react-redux';
+import { saveQueryDataVariable } from '../../Redux/actions/queryAction';
+import SupportAgentIcon from '@mui/icons-material/SupportAgent';
+import { getAuth, signOut } from "firebase/auth";
 
 mapboxgl.accessToken =
   'pk.eyJ1Ijoib2FrdHJlZWFuYWx5dGljcyIsImEiOiJjbGhvdWFzOHQxemYwM2ZzNmQxOW1xZXdtIn0.JPcZgPfkVUutq8t8Z_BaHg';
 
-const Map = () => {
+const MapComponent = () => {
+
+  //----------Firebase--------\\
+  const auth = getAuth();
+
+  function logout(auth) {
+    signOut(auth)
+      .then(() => {
+        console.log("Sign-out successful.");
+      })
+      .catch((error) => {
+        // An error happened.
+      });
+  }
+  // ---------- Redux -----------\\
+  const dispatch = useDispatch()
+  const currentJson = useSelector((state) => state.myState.currentLayerDataVariable)
+
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const isInitialMount = useRef(true);
@@ -27,10 +50,12 @@ const Map = () => {
   const [pointsInRect, setPointsInRect] = useState([]);
   const popUp = new Popup({ closeButton: false, anchor: "left" });
 
-  const [isLayerVisible, setIsLayerVisible] = useState(false);
+  const [isDashboardVisible, setIsDashboardVisible] = useState(false);
+  const [isDataManagementVisible, setIsDataManagementVisible] = useState(false);
   const [isQueryVisible, setIsQueryVisible] = useState(false);
   const [isToolVisible, setIsToolVisible] = useState(false);
   const [isSettingVisible, setIsSettingVisible] = useState(false);
+  const [isAgentVisible, setIsAgentVisible] = useState(false);
 
   const [selectedLayerListItemText, setSelectedLayerListItemText] = React.useState(null);
 
@@ -47,28 +72,24 @@ const Map = () => {
   };
 
   const setWorkLayer = () => {
-    setLoading(true)
-    const layername = selectedLayerListItemText.split("_")[1]
-    console.log(layername)
-    fetch(`layers/${layername}.json`
-      , {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      }
-    )
-      .then(function (response) {
-        return response.json();
-      })
-      .then(function (myJson) {
-        console.log(myJson)
-        setGeoJson(myJson)
-        setGeoLength(myJson.features.length)
-        putGeoJson2Map(myJson)
-        setLoading(false)
-      });
+
+
+    setLoading(false)
+
   }
+
+  useEffect(() => {
+    if (currentJson != null) {
+      setGeoJson(currentJson)
+      setGeoLength(currentJson.features.length)
+      putGeoJson2Map(currentJson)
+    }
+  }, [currentJson])
+  // useEffect(() => {
+  //   if (mGeoJson) {
+  //     putGeoJson2Map(mGeoJson)
+  //   }
+  // }, [mGeoJson])
 
   const putGeoJson2Map = (geodata) => {
 
@@ -169,6 +190,9 @@ const Map = () => {
     });
 
     mapRef.current?.on("style.load", () => {
+
+
+
       mapRef.current?.flyTo({
         center: geodata.features[0].geometry.coordinates,
         zoom: 5,
@@ -253,7 +277,6 @@ const Map = () => {
                 zoom: zoom
               });
             }
-
           }
         );
       });
@@ -312,12 +335,14 @@ const Map = () => {
   }
 
   const [mapTileStyle, setMapTileStyle] = useState('mapbox://styles/mapbox/satellite-streets-v12');
+
   const handleTileStyleChange = (newTileStyle) => {
     setMapTileStyle(newTileStyle);
     console.log('Tile Style:', newTileStyle);
   };
   const handleGetPointsInRect = () => {
     if (mapRef.current && draw && mGeoJson) {
+      console.log(mGeoJson)
       const features = draw.getAll().features;
       if (features.length > 0) {
         const rectCoords = features[0].geometry.coordinates[0];
@@ -328,7 +353,9 @@ const Map = () => {
           })
         );
         console.log(pointsInRect)
+
         setPointsInRect(pointsInRect);
+        dispatch(saveQueryDataVariable(pointsInRect))
       }
     }
   };
@@ -375,7 +402,6 @@ const Map = () => {
   return (
     <div>
       <div className='topbar-container'>
-
         <div className='barBackground'>
         </div>
         <div
@@ -387,7 +413,7 @@ const Map = () => {
             zIndex: 1
           }}
         >
-          Geospatial Mapping Software
+          ARGOS - Intelligence Platform
         </div>
         <div
           style={{
@@ -409,11 +435,12 @@ const Map = () => {
             alt="Remy Sharp"
             src={assets.images.avatar}
           />
-          <div style={{ marginLeft: '10px' }}>Matthew May</div>
+          <div style={{ marginLeft: '10px' }}>{auth.currentUser?.displayName}</div>
           <img
             src={assets.images.logout}
             alt="Button label"
             style={{ width: "30px", height: "30px", marginLeft: '30px' }}
+            onClick={() => { logout(auth) }}
           />
         </div>
       </div>
@@ -422,23 +449,35 @@ const Map = () => {
         <div className='barBackground'>
         </div>
         <div className='sidebar-icon-container'>
-          <FontAwesomeIcon icon={faLayerGroup} className="sidebar-icons" onClick={() => { setIsLayerVisible(true) }} />
+
+          <FontAwesomeIcon icon={faChartLine} className="sidebar-icons" onClick={() => { setIsDashboardVisible(true) }} />
+          <FontAwesomeIcon icon={faLayerGroup} className="sidebar-icons" onClick={() => { setIsDataManagementVisible(true) }} />
           <FontAwesomeIcon icon={faSearch} className="sidebar-icons" onClick={() => { setIsQueryVisible(true) }} />
+          <FontAwesomeIcon icon={faUser} className="sidebar-icons"  onClick={() => { setIsAgentVisible(true) }}/>
           <FontAwesomeIcon icon={faTools} className="sidebar-icons" onClick={() => { setIsToolVisible(true) }} />
           <FontAwesomeIcon icon={faGear} className="sidebar-icons" onClick={() => { setIsSettingVisible(true) }} />
+
         </div>
       </div>
 
-      {isLayerVisible ?
-        <Window title="Data Layer" icon={faLayerGroup} initialSize={{ width: 1000, height: 700 }} initialPosition={{ x: 100, y: 100 }} onClose={() => { setIsLayerVisible(false) }}>
-          <DataLayer handleAddWorkspaceClick={setWorkLayer}
+      {isDashboardVisible ?
+        <Window title="Data Analysis" icon={faChartLine} initialSize={{ width: 500, height: 900 }} initialPosition={{ x: 1600, y: 100 }} onClose={() => { setIsDashboardVisible(false) }}>
+          <Dashboard />
+
+        </Window> : ""
+      }
+
+      {isDataManagementVisible ?
+        <Window title="Data Layer" icon={faLayerGroup} initialSize={{ width: '90%', height: '90%' }} initialPosition={{ x: 100, y: 80 }} onClose={() => { setIsDataManagementVisible(false) }}>
+          <DataManager
+            handleAddWorkspaceClick={setWorkLayer}
             handleListLayerItemSelected={handleListLayerItemSelected} />
 
         </Window> : ""
       }
 
       {isQueryVisible ?
-        <Window title="Query" icon={faSearch} initialSize={{ width: 600, height: 400 }} initialPosition={{ x: 100, y: 100 }} onClose={() => { setIsQueryVisible(false) }}>
+        <Window title="Query" icon={faSearch} initialSize={{ width: 400, height: 600 }} initialPosition={{ x: 100, y: 100 }} onClose={() => { setIsQueryVisible(false) }}>
           <SearchPanel onGeoFenceClick={handleGetPointsInRect} />
         </Window> : ""
       }
@@ -454,10 +493,11 @@ const Map = () => {
           <MapStyleSelection onTileStyleChange={handleTileStyleChange} />
         </Window> : ""
       }
+      {isAgentVisible ?
+        <Window title="Agent" icon={faUser} initialSize={{ width: 1000, height: 450 }} initialPosition={{ x: 100, y: 100 }} onClose={() => { setIsAgentVisible(false) }}>
+          <AgentPanel />
+        </Window> : ""}
 
-      {/* <Window title="Summary" icon={faBusSimple} initialSize={{ width: 600, height: 400 }} initialPosition={{ x: 1200, y: 100 }} onClose={() => { setIsSettingVisible(false) }}>
-        <SummaryPanel  total={geoLength}/>
-      </Window> */}
 
       <div
         style={
@@ -482,4 +522,13 @@ const Map = () => {
   );
 };
 
+const Map = () => {
+  return (
+    <Provider store={store}>
+      <MapComponent />
+    </Provider>
+  );
+};
 export default Map;
+
+// export default Map;
